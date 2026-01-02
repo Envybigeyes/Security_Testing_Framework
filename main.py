@@ -1,97 +1,81 @@
-python
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
-import uuid, random, time
+import uuid, random, time, os
+import requests
 
 app = FastAPI()
 
-# In-memory session store (swap for DB later)
-sessions = {}
+# --- In-memory verification sessions ---
+verification_sessions = {}
 
-def create_session(phone):
+def create_verification_session(phone):
 session_id = str(uuid.uuid4())
 otp = str(random.randint(100000, 999999))
-sessions[session_id] = {
+verification_sessions[session_id] = {
 "phone": phone,
 "otp": otp,
 "attempts": 0,
 "verified": False,
-"created": time.time()
+"created_at": time.time()
 }
 return session_id, otp
 
+# --- Send OTP (placeholder for SMS integration) ---
+def send_sms_otp(phone, otp):
+# Example placeholder - integrate Vonage SMS here
+print(f"Sending OTP {otp} to {phone}")
+# requests.post("https://rest.nexmo.com/sms/json", ...)
 
-# ========== AUTO FRAUD TRIGGER ==========
+# --- Place Vonage call (placeholder) ---
+def place_call(phone, session_id):
+print(f"Placing call to {phone} with session {session_id}")
+# Use Vonage Voice API here
+
+# --- Automatic fraud trigger ---
 @app.post("/fraud/trigger")
 async def fraud_trigger(data: dict):
 phone = data["phone"]
-session_id, otp = create_session(phone)
-return {"session_id": session_id, "status": "auto_started"}
+session_id, otp = create_verification_session(phone)
+send_sms_otp(phone, otp)
+place_call(phone, session_id)
+return {"status": "auto_verification_started", "session_id": session_id}
 
-
-# ========== MANUAL FRAUD TRIGGER ==========
+# --- Manual fraud trigger ---
 @app.post("/fraud/manual-call")
-async def manual_call(data: dict):
+async def manual_call(data: dict, request: Request):
+key = request.headers.get("X-Internal-Key")
+if key != os.getenv("INTERNAL_KEY"):
+return {"error": "unauthorized"}
+
 phone = data["phone"]
-session_id, otp = create_session(phone)
-return {"session_id": session_id, "status": "manual_started"}
+reason = data.get("reason", "manual_fraud_review")
+session_id, otp = create_verification_session(phone)
+print(f"Manual fraud call triggered: {reason}")
+send_sms_otp(phone, otp)
+place_call(phone, session_id)
+return {"status": "manual_verification_started", "session_id": session_id}
 
-
-# ========== VONAGE ANSWER ==========
+# --- IVR Answer URL ---
 @app.get("/answer")
 async def answer(session_id: str):
 return JSONResponse([
-{"action": "talk", "text":
-"This is an automated fraud prevention call. "
-"We detected unusual activity on your account."},
-{"action": "talk", "text":
-"Please enter the 6 digit code sent to your phone."},
-{"action": "input",
-"maxDigits": 6,
-"eventUrl": [f"https://YOUR_RENDER_URL/verify?session_id={session_id}"]}
+{
+"action": "talk",
+"text": "This is an automated fraud prevention call. Press 1 to confirm, 2 if this was not you."
+},
+{
+"action": "input",
+"maxDigits": 1,
+"eventUrl": [f"https://{os.getenv('FLY_APP_NAME')}.fly.dev/input?session_id={session_id}"]
+}
 ])
 
-
-# ========== OTP VERIFY ==========
-@app.post("/verify")
-async def verify(request: Request, session_id: str):
+# --- IVR input handler ---
+@app.post("/input")
+async def input(request: Request):
 data = await request.json()
-entered = data["dtmf"]["digits"]
-session = sessions.get(session_id)
-
-if not session:
-return [{"action": "talk", "text": "Session expired."}]
-
-session["attempts"] += 1
-
-if entered == session["otp"]:
-session["verified"] = True
-return [{"action": "talk", "text": "Verification successful. Thank you."}]
-
-if session["attempts"] >= 3:
-return [{"action": "talk",
-"text": "Verification failed. Your account remains protected."}]
-
-return [
-{"action": "talk",
-"text": "Incorrect code. Please enter your birth month and day. Example: zero one zero five."},
-{"action": "input",
-"maxDigits": 4,
-"eventUrl": [f"https://YOUR_RENDER_URL/verify-dob?session_id={session_id}"]}
-]
-
-
-# ========== DOB VERIFY ==========
-@app.post("/verify-dob")
-async def verify_dob(request: Request, session_id: str):
-data = await request.json()
-entered = data["dtmf"]["digits"]
-
-STORED_DOB = "0105" # MMDD example
-
-if entered == STORED_DOB:
-sessions[session_id]["verified"] = True
-return [{"action": "talk", "text": "Verification complete."}]
-
-return [{"action": "talk",
-"text": "Verification failed. Please contact support."}]
+digit = data.get("dtmf", {}).get("digits")
+msg = "Invalid option."
+if digit == "1": msg = "Thank you. Verification complete."
+if digit == "2": msg = "Alert! Escalating to fraud team."
+return JSONResponse([{"action": "talk", "text": msg}])
