@@ -1,36 +1,41 @@
 # ui.py
+from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
+from auth import require_role
 from storage import call_logs
 
-def render_dashboard():
+router = APIRouter()
+
+@router.get("/ui", response_class=HTMLResponse)
+async def ui(request: Request):
+    require_role(request, "agent")
+
     rows = ""
-    for sid, v in call_logs.items():
+    for session_id, data in call_logs.items():
         rows += f"""
         <tr>
-            <td>{sid}</td>
-            <td>{v['phone']}</td>
-            <td>{v['script']}</td>
-            <td>{v['language']}</td>
-            <td>{v['otp']}</td>
-            <td>{v['result']}</td>
+            <td>{session_id}</td>
+            <td>{data['phone']}</td>
+            <td>{data['script']}</td>
+            <td>{data['language']}</td>
+            <td>{data['result']}</td>
         </tr>
         """
 
-    return HTMLResponse(f"""
+    return f"""
     <html>
     <body>
-        <h2>Verification Operations Dashboard</h2>
+        <h2>Fraud Verification Dashboard</h2>
         <table border="1">
             <tr>
                 <th>Session</th>
                 <th>Phone</th>
                 <th>Script</th>
-                <th>Language</th>
-                <th>OTP</th>
-                <th>Outcome</th>
+                <th>Lang</th>
+                <th>Result</th>
             </tr>
             {rows}
         </table>
     </body>
     </html>
-    """)
+    """
