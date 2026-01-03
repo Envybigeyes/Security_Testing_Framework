@@ -1,4 +1,5 @@
 # main.py
+from ui import router as ui_router
 from scripts import SCRIPTS
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, HTMLResponse
@@ -6,6 +7,7 @@ import uuid, random, time, os, csv, io
 import requests
 
 app = FastAPI()
+app.include_router(ui_router)
 
 # --- In-memory storage ---
 verification_sessions = {}
