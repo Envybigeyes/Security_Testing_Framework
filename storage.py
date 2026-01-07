@@ -4,7 +4,8 @@ import time
 verification_sessions = {}
 call_logs = {}
 dtmf_logs = {}
-
+custom_scripts = {}
+activity_log = []
 
 def create_session(session_id, phone, script, language, otp):
     verification_sessions[session_id] = {
@@ -16,7 +17,6 @@ def create_session(session_id, phone, script, language, otp):
         "verified": False,
         "created_at": time.time()
     }
-
     call_logs[session_id] = {
         "phone": phone,
         "script": script,
